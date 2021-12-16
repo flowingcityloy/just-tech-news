@@ -33,19 +33,60 @@ router.get('/:id', (req, res) => {
 });
 
 // POST/api/users
-router.post('/', (req, res) => {
+router.get('/post/:id', (req, res) => {
     // expects {username: 'Lernantino', email: 'lernantino@gmail.com', password: 'password1234'}
-    User.create({
-        username: req.body.username,
-        email: req.body.email,
-        password: req.body.password
-    })
-        .then(dbUserData => res.json(dbUserData))
-        .catch(err => {
-            console.log(err);
-            res.status(500).json(err);
-        });
+    Post.findOne({
+        where: {
+            id: req.params.id
+        },
+        attributes: [
+            'id',
+            'post_url',
+            'title',
+            'created_at',
+            [sequelize.literal('(SELECT COUNT(*) FROM vote WHERE post.id = vote.post_id'), 'vote_count'],
+            include: [
+                {
+                model: Comment,
+                attributes: ['username']
+            }
+            },
+            ]
+        ]
+    }).then(dbUserData => {
+                if (!dbUserData) {
+                    res.status(400).json({ message: 'No user with that email address!' });
+                    return;
+                }
+
+                const validPassword = dbUserData.checkpassword(req.body.password);
+
+                if (!validPassword) {
+                    res.status(400).json({ message: 'Incorrect password!' });
+                    return;
+                }
+
+
+                res.session.save(() => {
+                    // declare session variables
+                    req.session.user_id = dbUserData.id;
+                    req.session.username = dbUserData.username;
+                    req.session.loggedIn = true;
+
+                    res.json({ user: dbUserData, message: 'You are now logged in!' });
+                });
+            });
+
+router.post('/logout', (req, res) => {
+
 });
+if (req.session.loggedIn) {
+    req.session.destroy(() => {
+        res.status(204).end();
+    });
+} else {
+    res.status(404).end();
+}
 
 // PUT/api/users/1
 router.put('./:id', (req, res) => {
